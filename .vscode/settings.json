@@ -1,0 +1,6 @@
+  {
+    "python.defaultInterpreterPath": "/opt/homebrew/Caskroom/miniforge/base/envs/arqamai/bin/python",
+    "python.languageServer": "Pylance"
+  }
+  
+  
