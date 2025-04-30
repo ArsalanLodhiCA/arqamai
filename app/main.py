@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from scipy.spatial.distance import cosine
 
-
-
 # Loads the .env file in the current directory
 load_dotenv()
 api_key = os.getenv('OPENAI_API_KEY')
@@ -16,15 +14,27 @@ api_key = os.getenv('OPENAI_API_KEY')
 # Initializes OpenAI client
 client = OpenAI(api_key=api_key)
 
-# Load messages and their precomputed embeddings
-with open("data/school_comm.json", "r") as f:
-    messages = json.load(f)
-
-with open("data/message_embeddings.json", "r") as f:
-    message_embeddings = json.load(f)
-
 # FastAPI app
 app = FastAPI()
+
+# Initialize global variables
+messages = []
+message_embeddings = []
+
+# Load files once at startup
+@app.on_event("startup")
+def load_files():
+    global messages, message_embeddings
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    school_comm_path = os.path.join(current_dir, "data", "schoology_messages.json")
+    embeddings_path = os.path.join(current_dir, "data", "message_embeddings.json")
+    
+    with open(school_comm_path, "r") as f:
+        messages = json.load(f)
+    
+    with open(embeddings_path, "r") as f:
+        message_embeddings = json.load(f)
 
 # Request model
 class QuestionRequest(BaseModel):
@@ -47,19 +57,36 @@ def find_most_similar(user_emb, stored_embeddings, top_k=2):
     top_matches = sorted(scored, key=lambda x: x[1], reverse=True)[:top_k]
     return top_matches
 
-# Retreive Message - Find Original Message Text for GPT
+# Retrieve Message - Find Original Message Text for GPT
 def get_message_by_id(messages, msg_id):
     for msg in messages:
         if msg["id"] == msg_id:
             return msg
     return None
 
-
 # GPT Response: Format Prompt and Ask GPT
 def ask_gpt(question, context_messages):
-    context_text = "\n\n".join([
-        f"Subject: {msg['subject']}\n\n{msg['body']}" for msg in context_messages if msg
-    ])
+    parts = []
+    for msg in context_messages:
+        if not msg:
+            continue
+        
+        entry = f"Subject: {msg.get('subject', '')}\n\nBody: {msg.get('body', '')}"
+        
+        # Add Attachments if available
+        attachments_text = msg.get('attachments_text')
+        if attachments_text:
+            entry += f"\n\nAttachments: {attachments_text}"
+        
+        # Add Table Info if available
+        table_block = msg.get('table_block')
+        if table_block:
+            entry += f"\n\nTable Info: {table_block}"
+        
+        parts.append(entry)
+
+    # Join all entries together for context
+    context_text = "\n\n---\n\n".join(parts)
 
     prompt = f"""
 You are a helpful assistant that answers parent questions using school communications.
@@ -92,20 +119,3 @@ def ask_question(req: QuestionRequest):
         return {"answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-
-
-
-#user_question = "What time is the Quran award ceremony for 3rd grade?"
-#user_question = "Which teachers put together the Quran ceremony?"
-
-#user_question = "When is the coffee chat? is there specific time?"
-#user_embedding = get_embedding(user_question)
-
-# Step 2: Compare with Stored Message Embeddings (Cosine Similarity)
-
-
-
-
-
