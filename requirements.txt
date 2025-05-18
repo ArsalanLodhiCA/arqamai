@@ -4,3 +4,7 @@ python-dotenv
 openai
 scipy
 uvicorn
+aiohttp
+aiofiles
+python-docx
+PyPDF2
